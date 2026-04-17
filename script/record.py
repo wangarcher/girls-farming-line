@@ -5,6 +5,9 @@ import json
 from PIL import ImageGrab, ImageChops
 import os
 
+time.sleep(5)
+print("开始录制")
+
 events = []
 start_time = time.time()
 

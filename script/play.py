@@ -10,12 +10,13 @@ def compare_images(img1_path, threshold=10):
     """Compare current screen with img1_path, return True if similar."""
     img1 = Image.open(img1_path).convert('RGB')
     img2 = ImageGrab.grab().convert('RGB')
+    # 检测整个屏幕
     diff = ImageChops.difference(img1, img2)
-    # For RGB, getdata() returns tuples, so sum all channel values
     diff_sum = sum(sum(pixel) for pixel in diff.getdata())
+    print(f"diff_sum: {diff_sum}")
     return diff_sum < threshold
 
-def monitor_screen_and_click_if_needed(screenshot_path, monitor_time=120, check_interval=2, similarity_threshold=10):
+def monitor_screen_and_click_if_needed(screenshot_path, monitor_time=120, check_interval=2, similarity_threshold=2000000):
     """
     Monitor the screen for up to monitor_time seconds.
     If the screen is not similar to the screenshot, click center and keep monitoring.
@@ -31,10 +32,16 @@ def monitor_screen_and_click_if_needed(screenshot_path, monitor_time=120, check_
             print("屏幕与截图一致，继续后续操作。")
             return
         else:
-            print("屏幕与截图不一致，点击屏幕中央并继续等待...")
+            print("屏幕与截图不一致，点击屏幕中央两次并等待1分钟...")
             pyautogui.click(center_x, center_y)
-        time.sleep(check_interval)
-    print("监控超时，继续执行后续操作。")
+            time.sleep(90)  # 等待1分钟后再检测
+
+    print("监控超时，执行Esc操作...")
+    for i in range(5):
+        pyautogui.press('esc')
+        print(f"第{i+1}次按Esc")
+        time.sleep(3)
+    print("Esc操作完成，准备重新开始整个序列。")
 
 
 def load_macro(file_path):
@@ -61,8 +68,10 @@ def execute_event(event, click_count=None):
     if event_type == "mouse_click":
         if click_count is not None:
             print(f"Mouse click #{click_count}: {data}")
-        button = normalize_button(data["button"])
-        pyautogui.click(data["x"], data["y"], button=button)
+        # 只在 pressed 为 true 时点击
+        if data.get("pressed", True):
+            button = normalize_button(data["button"])
+            pyautogui.click(data["x"], data["y"], button=button)
 
     elif event_type == "mouse_move":
         pyautogui.moveTo(data["x"], data["y"])
@@ -89,26 +98,19 @@ def play_macro(events):
     while i < len(events):
         event = events[i]
         delay = event["time"] - last_time
-        time.sleep(max(delay, 0))
+        # 对 mouse_click 事件，保证最小间隔0.1秒
+        if event["type"] == "mouse_click":
+            time.sleep(max(delay, 0.1))
+        else:
+            time.sleep(max(delay, 0))
 
         # 检查是否为截图事件
         if event["type"] == "screenshot":
             screenshot_path = event["data"]["file"]
-            # 监控前后2分钟
-            monitor_start = event["time"] - 120
-            monitor_end = event["time"] + 120
-            # 跳过前2分钟内的事件
-            j = i - 1
-            while j >= 0 and events[j]["time"] >= monitor_start:
-                j -= 1
             # 监控
-            monitor_screen_and_click_if_needed(screenshot_path, monitor_time=120, check_interval=2, similarity_threshold=10)
-            # 跳过后2分钟内的事件
-            k = i + 1
-            while k < len(events) and events[k]["time"] <= monitor_end:
-                k += 1
-            i = k
+            monitor_screen_and_click_if_needed(screenshot_path, monitor_time=190, check_interval=2, similarity_threshold=3000000)
             last_time = event["time"]
+            i += 1
             continue
 
         if event["type"] == "mouse_click":
@@ -127,10 +129,10 @@ if __name__ == "__main__":
     RECORDS_DIR = os.path.join(MAIN_DIR, "records")
     macro_file = os.path.join(RECORDS_DIR, "record.json")
     events = load_macro(macro_file)
+    print("5秒后开始执行...")
+    time.sleep(5)
 
     while True:
-        print("3秒后开始执行...")
-        time.sleep(3)
         play_macro(events)
         print("本轮执行完成，3秒后自动重启...")
         time.sleep(3)
